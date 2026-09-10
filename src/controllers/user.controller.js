@@ -163,8 +163,8 @@ const logoutUser = asyncHandler(async(req,res)=> {
     await User.findByIdAndUpdate(
         req.user._id,
         {
-            $set:{
-                refreshToken:undefined
+            $unset:{
+                refreshToken:1
             }
         },
         {
@@ -197,7 +197,7 @@ const refreshAccessToken = asyncHandler(async(req,res) =>{
            process.env.REFRESH_TOKEN_SECRET
         )
         
-       const user= User.findById(decodedToken?._id)
+       const user=await  User.findById(decodedToken?._id)
    
        if(!user){
            throw new ApiError(401,"Invalid refresh token")
@@ -231,10 +231,11 @@ const refreshAccessToken = asyncHandler(async(req,res) =>{
 })
 
 const changeCurrentPassword = asyncHandler(async(req,res) =>{
+
     
     const {oldPassword,newPassword}=req.body
 
-    const user=User.findById(req.user?._id)
+    const user= await User.findById(req.user?._id)
     const isPasswordCorrect = await user.isPasswordCorrect(oldPassword)
 
     if(!isPasswordCorrect){
@@ -252,7 +253,7 @@ const changeCurrentPassword = asyncHandler(async(req,res) =>{
 const getCurrentUser = asyncHandler(async (req,res)=>{
     return res
     .status(200)
-    .json(200,req.user,"current user fetched successfully")
+    .json(new ApiResponse(200,req.user,"current user fetched successfully"))
 })
 
 const updateAccountDetails = asyncHandler(async(req,res)=>{
@@ -262,7 +263,7 @@ const updateAccountDetails = asyncHandler(async(req,res)=>{
         throw new ApiError(400,"All fields are required")
     }
 
-    const user= User.findByIdAndUpdate(
+    const user= await User.findByIdAndUpdate(
         req.user?._id,
         {
             $set:{
@@ -340,6 +341,7 @@ const updateUserCoverImage = asyncHandler(async(req,res)=>{
 const getUserChannelProfile = asyncHandler(async(req,res)=>{
 
     const {username} = req.params
+    
 
     if(!username?.trim()){
         throw new ApiError(400,"Username is missing")
@@ -398,7 +400,7 @@ const getUserChannelProfile = asyncHandler(async(req,res)=>{
         }
     ])
 
-    console.log(channel)
+    
 
     if(!channel?.length){
         throw new ApiError(404,"channel does not exist")
@@ -431,13 +433,14 @@ const getWatchHistory = asyncHandler(async(req,res)=> {
                         localField:"owner",
                         foreignField:"_id",
                         as:"owner",
-                        pipeline:{
-                            $project:{
+                        pipeline:[
+                            {$project:{
                                 fullname:1,
                                 username:1,
                                 avatar:1
                             }
                         }
+                        ]
                     }
                     },
                     {

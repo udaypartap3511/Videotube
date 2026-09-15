@@ -39,7 +39,7 @@ const getAllVideos = asyncHandler(async (req, res) => {
     const videos= await Video.find(filter)
                              .skip(skip)
                              .sort(sort)
-                             .limit(Nuber(limit))
+                             .limit(Number(limit))
     
 
     return res
@@ -232,7 +232,9 @@ const togglePublishStatus = asyncHandler(async (req, res) => {
                 }
             }
         ],
-        {new:true}
+        {   new:true,
+            updatePipeline:true
+        }
     )
 
     if(!video){

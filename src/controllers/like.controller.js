@@ -5,6 +5,7 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import {Like} from "../models/like.models.js"
 import {Comment} from "../models/comment.models.js"
 import { Video } from "../models/video.models.js";
+import { Tweet } from "../models/tweet.models.js";
 
 const toggleVideoLike = asyncHandler(async (req, res) => {
     const {videoId} = req.params

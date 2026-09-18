@@ -2,20 +2,20 @@ import mongoose from "mongoose";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import { deleteFromCloudinary, uploadOnCloudinary } from "../utils/cloudinary.js";
 import {Video} from "../models/video.models.js";
 import { User } from "../models/user.models.js";
 
 const getAllVideos = asyncHandler(async (req, res) => {
-    const { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query
+    const { page = 1, limit = 10, query, sortBy= "createdAt", sortType="desc", userId } = req.query
     //TODO: get all videos based on query, sort, pagination
 
-    if(userId && mongoose.isValidObjectId(userId)){
+    if(userId && !mongoose.isValidObjectId(userId)){
         throw new ApiError(400,"Invalid UserId")
     }
 
     if(Number(page)<1 || Number(limit)<1){
-        throw new ApiError(401,"page and limit must be positive number")
+        throw new ApiError(400,"page and limit must be positive number")
     }
 
     const filter= {};
@@ -54,7 +54,7 @@ const publishAVideo = asyncHandler(async (req, res) => {
     // TODO: get video, upload to cloudinary, create video
 
     if(!title || !description){
-        throw new ApiError(401,"title or description is missing")
+        throw new ApiError(400,"title or description is missing")
     }
 
     const videoLocalPath = req.files?.videoFile?.[0]?.path
@@ -86,7 +86,9 @@ const publishAVideo = asyncHandler(async (req, res) => {
     const video= await Video.create(
         {
             videoFile:videoFile.url,
+            videoFilePublicId:videoFile.public_id,
             thumbnail:thumbnail.url,
+            thumbnailPublicId: thumbnail.public_id,
             owner,
             title,
             description,
@@ -95,8 +97,8 @@ const publishAVideo = asyncHandler(async (req, res) => {
     )
 
     return res
-    .status(200)
-    .json(new ApiResponse(200,video,"video created successfully"))
+    .status(201)
+    .json(new ApiResponse(201,video,"video created successfully"))
 })
 
 const getVideoById = asyncHandler(async (req, res) => {
@@ -145,8 +147,17 @@ const updateVideo = asyncHandler(async (req, res) => {
         updateDetails.description=description;
     }
 
+    const video = await Video.findOne({
+        _id:videoId,
+        owner:req.user?._id
+    })
 
+    if(!video){
+        throw new ApiError(404,"video not found")
+    }
     const thumbnailLocalPath= req.file?.path;
+
+    let oldThumbnailPubliId = null;
 
     if(thumbnailLocalPath){
        const thumbnail= await uploadOnCloudinary(thumbnailLocalPath);
@@ -156,11 +167,14 @@ const updateVideo = asyncHandler(async (req, res) => {
        }
 
        updateDetails.thumbnail=thumbnail.url;
+       updateDetails.thumbnailPublicId = thumbnail.public_id;
+
+        oldThumbnailPubliId=video.thumbnailPublicId;
     }
 
 
 
-    const video= await Video.findOneAndUpdate(
+    const updatedVideo= await Video.findOneAndUpdate(
         {
            _id: videoId,
            owner:req.user?._id
@@ -170,14 +184,18 @@ const updateVideo = asyncHandler(async (req, res) => {
         },
         {new :true}
     )
-
-    if(!video){
+    
+    if(!updatedVideo){
         throw new ApiError(404,"video not found")
     }
 
+    if(oldThumbnailPubliId){
+        await deleteFromCloudinary(oldThumbnailPubliId,"image")
+       }
+
     return res
     .status(200)
-    .json(new ApiResponse(200,video,"video details updated successfully"))
+    .json(new ApiResponse(200,updatedVideo,"video details updated successfully"))
 
 })
 
@@ -192,7 +210,7 @@ const deleteVideo = asyncHandler(async (req, res) => {
     if(!mongoose.isValidObjectId(videoId)){
         throw new ApiError(400,"Invalid videoID")
     }
-
+    
     const video=await Video.findOneAndDelete(
         {
             _id:videoId,
@@ -203,9 +221,21 @@ const deleteVideo = asyncHandler(async (req, res) => {
         throw new ApiError(404,"video not found");
     }
 
+    if(video.videoFilePublicId){
+        await deleteFromCloudinary(video.videoFilePublicId,"video")
+    }
+    
+
+    if(video.thumbnailPublicId){
+        await deleteFromCloudinary(video.thumbnailPublicId,"image")
+    }
+    
+
+
+
     return res
     .status(200)
-    .json(new ApiResponse(200,"video deleted successfully"));
+    .json(new ApiResponse(200,{},"video deleted successfully"));
 })
 
 const togglePublishStatus = asyncHandler(async (req, res) => {
